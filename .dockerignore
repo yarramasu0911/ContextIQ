@@ -1,0 +1,8 @@
+venv/
+rag_venv/
+__pycache__/
+*.pyc
+.env
+.git/
+data/uploads/*
+data/sample_docs/*
