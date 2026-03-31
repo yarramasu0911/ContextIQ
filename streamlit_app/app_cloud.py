@@ -3,7 +3,7 @@ import sys
 import os
 
 # Add parent directory to path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.document_processor import process_document
 from app.embeddings import EmbeddingModel
