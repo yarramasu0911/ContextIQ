@@ -75,4 +75,4 @@ sentence_transformers
 fastapi
 transformers
 openai
-faiss
+faiss-cpu
