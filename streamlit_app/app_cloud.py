@@ -50,9 +50,7 @@ def main():
                 # Process
                 chunks = process_document(tmp_path)
                 embeddings = embedding_model.embed_texts(chunks)
-                vector_store.add_documents(
-                    chunks, embeddings, filename=uploaded_file.name
-                )
+                vector_store.add_documents(chunks, embeddings)
 
                 # Cleanup
                 os.unlink(tmp_path)

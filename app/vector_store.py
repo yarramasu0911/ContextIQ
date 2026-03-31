@@ -70,3 +70,7 @@ class VectorStore:
                 break
 
         return results
+
+    def clear(self):
+        self.index.reset()
+        self.documents = []
