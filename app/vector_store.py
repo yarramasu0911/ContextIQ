@@ -74,3 +74,6 @@ class VectorStore:
     def clear(self):
         self.index.reset()
         self.documents = []
+
+    def get_document_list(self):
+        return self.documents
