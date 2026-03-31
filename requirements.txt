@@ -73,7 +73,6 @@ bs4
 striprtf
 sentence_transformers
 fastapi
-contextlib
 transformers
 openai
 faiss
