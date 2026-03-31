@@ -76,3 +76,4 @@ fastapi
 transformers
 openai
 faiss-cpu
+torchvision
