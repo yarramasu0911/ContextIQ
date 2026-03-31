@@ -68,3 +68,8 @@ urllib3==2.6.3
 wcwidth==0.6.0
 xgboost==3.2.0
 pypdf2
+docx
+bs4
+striprtf
+sentence_transformers
+fastapi
