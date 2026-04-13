@@ -11,3 +11,5 @@ torch
 torchvision
 faiss-cpu
 openai
+pinecone
+streamlit_cookies_controller

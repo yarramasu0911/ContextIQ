@@ -5,7 +5,7 @@ sys.path.append(".")
 
 from app.document_processor import process_document
 from app.embeddings import EmbeddingModel
-from app.vector_store import VectorStore
+from app.vector_store import PineconeVectorStore
 
 # Process document
 chunks = process_document("data/sample_docs/CaseFiles.pdf")
@@ -15,7 +15,7 @@ model = EmbeddingModel()
 embeddings = model.embed_texts(chunks)
 
 # Store in vector store
-store = VectorStore(dimension=384)
+store = PineconeVectorStore(dimension=384)
 store.add_documents(chunks, embeddings)
 
 print(f"Stored {store.index.ntotal} vectors")

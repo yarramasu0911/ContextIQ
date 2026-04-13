@@ -6,9 +6,12 @@ import os
 
 from .document_processor import process_document
 from .embeddings import EmbeddingModel
-from .vector_store import VectorStore
+from .vector_store_pinecone import PineconeVectorStore
 from .rag_chain import RAGChain
 
+embedding_model = None
+vector_store = None
+rag_chain = None
 
 UPLOAD_DIR = "data/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -16,10 +19,9 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize models when server starts."""
     global embedding_model, vector_store, rag_chain
     embedding_model = EmbeddingModel()
-    vector_store = VectorStore(dimension=384)
+    vector_store = PineconeVectorStore()
     rag_chain = RAGChain(
         embedding_model=embedding_model,
         vector_store=vector_store,
@@ -33,51 +35,42 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RAG Document Q&A", lifespan=lifespan)
 
 
-@app.get("/health/")
+@app.get("/health")
 def health_check():
-    """Simple health check endpoint."""
     return {"status": "ok"}
 
 
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
-    """Upload and process a document."""
-    # 1. Validate file type
     if not file.filename.endswith(
         (".pdf", ".txt", ".docx", ".csv", ".html", ".htm", ".json", ".rtf", ".md")
     ):
         return JSONResponse(
             status_code=400,
-            content={"error": "Unsupported file type. Upload PDF or TXT."},
+            content={"error": "Unsupported file type."},
         )
 
-    # 2. Save uploaded file
     file_path = os.path.join(UPLOAD_DIR, file.filename)
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    # 3. Process into chunks
     chunks = process_document(file_path)
-
-    # 4. Create embeddings and store
-    embeddings = embedding_model.embed_texts(chunks)
-    vector_store.add_documents(chunks, embeddings)
+    chunk_texts = [chunk["content"] for chunk in chunks]
+    embeddings = embedding_model.embed_texts(chunk_texts)
+    vector_store.add_documents(chunks, embeddings, filename=file.filename)
 
     return {
         "message": f"Document '{file.filename}' processed successfully",
         "chunks": len(chunks),
-        "total_documents_stored": vector_store.index.ntotal,
+        "total_documents_stored": vector_store.get_total_vectors(),
     }
 
 
 @app.post("/ask")
 def ask_question(question: str):
-    """Ask a question about uploaded documents."""
-    if vector_store.index.ntotal == 0:
+    if vector_store.get_total_vectors() == 0:
         return JSONResponse(
             status_code=400,
-            content={"error": "No documents uploaded yet. Upload a document first."},
+            content={"error": "No documents uploaded yet."},
         )
-
-    result = rag_chain.ask(question)
-    return result
+    return rag_chain.ask(question)

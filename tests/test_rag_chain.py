@@ -5,7 +5,7 @@ sys.path.append(".")
 
 from app.document_processor import process_document
 from app.embeddings import EmbeddingModel
-from app.vector_store import VectorStore
+from app.vector_store import PineconeVectorStore
 from app.rag_chain import RAGChain
 
 # Setup
@@ -13,7 +13,7 @@ chunks = process_document("data/sample_docs/CaseFiles.pdf")
 model = EmbeddingModel()
 embeddings = model.embed_texts(chunks)
 
-store = VectorStore(dimension=model.get_dimension())
+store = PineconeVectorStore(dimension=model.get_dimension())
 store.add_documents(chunks, embeddings)
 
 # Create RAG chain (free HuggingFace)
