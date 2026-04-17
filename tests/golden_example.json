@@ -1,0 +1,12 @@
+[
+  {
+    "question": "What is this document about?",
+    "answer": "The document describes <fill in with a one-sentence summary>.",
+    "contexts": ["<snippet that must appear in retrieved chunks>"]
+  },
+  {
+    "question": "What are the main points?",
+    "answer": "<reference answer>",
+    "contexts": []
+  }
+]

@@ -1,8 +1,22 @@
 {
   "prasanth_123": {
-    "password": "04e7b5edc812eafd098347cf0d8aacf7221fcef03d64a3ec4302690197cba6b5"
+    "password": "04e7b5edc812eafd098347cf0d8aacf7221fcef03d64a3ec4302690197cba6b5",
+    "role": "user"
   },
   "gopi_123": {
-    "password": "a14285be533c8454a639fa3c460f143af7530648c8414b4154e5f89c85a86482"
+    "password": "a14285be533c8454a639fa3c460f143af7530648c8414b4154e5f89c85a86482",
+    "role": "user"
+  },
+  "admin": {
+    "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "role": "admin"
+  },
+  "hr": {
+    "password": "070a3b5e8d4bd5c46acccb91c9c54614c0cd649e78c4c4719e3a64270bae5ddf",
+    "role": "hr"
+  },
+  "user": {
+    "password": "e606e38b0d8c19b24cf0ee3808183162ea7cd63ff7912dbb22b5e803286b4446",
+    "role": "user"
   }
 }
