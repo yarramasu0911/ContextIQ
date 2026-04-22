@@ -1,5 +1,23 @@
-from PyPDF2 import PdfReader
 from docx import Document
+
+try:
+    import pdfplumber
+except Exception:  # pragma: no cover
+    pdfplumber = None
+
+try:
+    from PyPDF2 import PdfReader  # legacy fallback
+except Exception:  # pragma: no cover
+    PdfReader = None
+
+# OCR for scanned PDFs is opt-in (requires Tesseract binary installed
+# separately) — fall back silently if the deps or the binary aren't present.
+try:
+    import pytesseract
+    from pdf2image import convert_from_path
+except Exception:  # pragma: no cover
+    pytesseract = None
+    convert_from_path = None
 import unicodedata
 import re
 import os
@@ -46,12 +64,88 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+def _ocr_pdf(file_path: str) -> str:
+    """Best-effort OCR for scanned PDFs. Returns empty string if unavailable."""
+    if pytesseract is None or convert_from_path is None:
+        return ""
+    try:
+        images = convert_from_path(file_path, dpi=200)
+    except Exception as e:
+        print(f"[ocr] pdf2image failed ({e}); is poppler installed?")
+        return ""
+    parts = []
+    for i, img in enumerate(images, start=1):
+        try:
+            text = pytesseract.image_to_string(img)
+        except Exception as e:
+            print(f"[ocr] tesseract failed on page {i}: {e}")
+            continue
+        if text.strip():
+            parts.append(f"[Page {i}]\n{text}")
+    return "\n\n".join(parts)
+
+
 def extract_text_from_pdf(file_path: str) -> str:
-    reader = PdfReader(file_path)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
-    return text
+    """Layout-aware PDF extraction via pdfplumber.
+
+    - Extracts page text and tables (rendered as `cell | cell | cell` rows).
+    - If the document has no extractable text (scanned PDF), falls back to OCR
+      when pytesseract + poppler are available.
+    """
+    if pdfplumber is not None:
+        parts = []
+        try:
+            with pdfplumber.open(file_path) as pdf:
+                for i, page in enumerate(pdf.pages, start=1):
+                    page_parts = []
+                    page_text = page.extract_text() or ""
+                    if page_text.strip():
+                        page_parts.append(page_text)
+
+                    for table in page.extract_tables() or []:
+                        rendered = []
+                        for row in table:
+                            cells = [
+                                (c or "").replace("\n", " ").strip() for c in row
+                            ]
+                            if any(cells):
+                                rendered.append(" | ".join(cells))
+                        if rendered:
+                            page_parts.append(
+                                "[Table]\n" + "\n".join(rendered)
+                            )
+
+                    if page_parts:
+                        parts.append(f"[Page {i}]\n" + "\n\n".join(page_parts))
+        except Exception as e:
+            print(f"[pdf] pdfplumber failed ({e}); falling back to PyPDF2")
+            parts = []
+
+        text = "\n\n".join(parts).strip()
+        if text:
+            return text
+
+    # Fallback 1: PyPDF2
+    if PdfReader is not None:
+        try:
+            reader = PdfReader(file_path)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() or ""
+            if text.strip():
+                return text
+        except Exception as e:
+            print(f"[pdf] PyPDF2 failed: {e}")
+
+    # Fallback 2: OCR (scanned PDF)
+    ocr_text = _ocr_pdf(file_path)
+    if ocr_text.strip():
+        return ocr_text
+
+    raise RuntimeError(
+        f"Could not extract text from {file_path}. The PDF may be scanned "
+        "(install pytesseract + Tesseract + poppler for OCR) or corrupted."
+    )
 
 
 def extract_text_from_txt(file_path: str) -> str:
@@ -298,10 +392,35 @@ def ingest_document(file_path: str) -> dict:
     }
 
 
-def process_document(file_path: str, chunk_size: int = 500, overlap: int = 100,
-                     use_semantic: bool = True, embedding_model=None) -> list:
+# Per-extension chunk size tuning. Tables/spreadsheets/slides need bigger
+# windows; prose is fine at 500 chars.
+_CHUNK_SIZE_BY_EXT = {
+    ".csv": 1000, ".tsv": 1000,
+    ".xlsx": 1000, ".xls": 1000,
+    ".pptx": 800, ".ppt": 800,
+    ".json": 1200, ".yaml": 1200, ".yml": 1200, ".xml": 1200,
+    ".log": 800,
+    ".html": 600, ".htm": 600,
+}
 
+
+def process_document(
+    file_path: str,
+    chunk_size: int | None = None,
+    overlap: int = 100,
+    use_semantic: bool = True,
+    embedding_model=None,
+    parent_window: int = 1,
+) -> list:
+    """Produce chunks for indexing, each carrying a `parent_content` field
+    built from [chunk_{i-parent_window}, ..., chunk_{i+parent_window}] — the
+    large context we show the LLM when this chunk is retrieved.
+    """
     document = ingest_document(file_path)
+    ext = document["metadata"]["file_type"]
+
+    if chunk_size is None:
+        chunk_size = _CHUNK_SIZE_BY_EXT.get(ext, 500)
 
     if use_semantic:
         chunks = semantic_chunking(
@@ -319,14 +438,22 @@ def process_document(file_path: str, chunk_size: int = 500, overlap: int = 100,
     total_chunks = len(chunks)
 
     for i, chunk in enumerate(chunks):
-        chunk_docs.append({
-            "content": chunk,
-            "metadata": {
-                **document["metadata"],
-                "chunk_index": i,
-                "total_chunks": total_chunks,
-                "chunking_method": "semantic" if use_semantic else "fixed",
-            },
-        })
+        lo = max(0, i - parent_window)
+        hi = min(total_chunks, i + parent_window + 1)
+        parent_content = " ".join(chunks[lo:hi])
+        chunk_docs.append(
+            {
+                "content": chunk,
+                "parent_content": parent_content,
+                "metadata": {
+                    **document["metadata"],
+                    "chunk_index": i,
+                    "total_chunks": total_chunks,
+                    "chunking_method": "semantic" if use_semantic else "fixed",
+                    "chunk_size_used": chunk_size,
+                    "parent_window": parent_window,
+                },
+            }
+        )
 
     return chunk_docs

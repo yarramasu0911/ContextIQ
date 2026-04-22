@@ -21,3 +21,8 @@ openpyxl
 python-pptx
 pyyaml
 python-dotenv
+pdfplumber
+pyjwt
+pytesseract
+pdf2image
+Pillow

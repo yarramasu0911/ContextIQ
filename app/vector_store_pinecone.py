@@ -27,10 +27,15 @@ class PineconeVectorStore:
 
             if isinstance(chunk, dict):
                 text = chunk.get("content", "no content")
+                parent = chunk.get("parent_content") or text
             else:
                 text = chunk
+                parent = chunk
 
             text = str(text)[:1000]
+            # Parent content is what the LLM actually sees; cap at 4000 chars
+            # to stay well under Pinecone's 40KB/vector metadata limit.
+            parent = str(parent)[:4000]
 
             if hasattr(embedding, "tolist"):
                 emb_list = embedding.tolist()
@@ -43,6 +48,7 @@ class PineconeVectorStore:
                     "values": emb_list,
                     "metadata": {
                         "text": text,
+                        "parent_content": parent,
                         "filename": str(filename),
                         # legacy field, kept for back-compat
                         "user_id": str(owner_username),
@@ -81,7 +87,9 @@ class PineconeVectorStore:
 
         return [
             (
-                match.metadata["text"],
+                # Return parent_content when available so the LLM gets the
+                # larger context window; fall back to the chunk itself.
+                match.metadata.get("parent_content") or match.metadata["text"],
                 match.score,
                 match.metadata.get("filename", "unknown"),
             )

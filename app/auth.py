@@ -85,7 +85,10 @@ def authenticate_user(username: str, password: str) -> bool:
     users = load_users()
     if username not in users:
         return False
-    return users[username]["password"] == hash_password(password)
+    info = users[username]
+    if info.get("active") is False:
+        return False
+    return info["password"] == hash_password(password)
 
 
 def get_role(username: str) -> Optional[str]:

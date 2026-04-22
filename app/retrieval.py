@@ -41,11 +41,16 @@ class ChunkRegistry:
         owner_username: str = "default",
         owner_role: str = "user",
         visibility: str = "private",
+        parent_contents: list[str] | None = None,
     ):
-        for text in texts:
+        for i, text in enumerate(texts):
+            parent = (
+                parent_contents[i] if parent_contents and i < len(parent_contents) else text
+            )
             self._chunks.append(
                 {
                     "text": text,
+                    "parent_content": parent,
                     "filename": filename,
                     "owner_username": owner_username,
                     "owner_role": owner_role,
@@ -103,7 +108,14 @@ class ChunkRegistry:
                 c["visibility"],
             ):
                 continue
-            results.append((c["text"], float(scores[idx]), c["filename"]))
+            # Return parent_content so the LLM gets the wider context.
+            results.append(
+                (
+                    c.get("parent_content") or c["text"],
+                    float(scores[idx]),
+                    c["filename"],
+                )
+            )
             if len(results) >= top_k:
                 break
         return results
@@ -118,6 +130,47 @@ class ChunkRegistry:
                 viewer_username, viewer_role, c["owner_username"], c["visibility"]
             )
         )
+
+    def rebuild_from_pinecone(self, vector_store, batch_size: int = 1000) -> int:
+        """Page through Pinecone and rebuild the BM25 corpus in-memory.
+
+        Called on startup so hybrid retrieval stays correct across restarts.
+        Returns the number of chunks loaded.
+        """
+        try:
+            # Pinecone caps top_k at 10_000 per query. Admin view sees
+            # everything (no filter), so one call returns the full corpus up
+            # to that cap.
+            matches = vector_store._list_matches(
+                viewer_username="__startup__", viewer_role="admin", top_k=10000
+            )
+        except Exception as e:
+            print(f"[registry] rebuild_from_pinecone failed: {e}")
+            return 0
+
+        self._chunks = []
+        for m in matches:
+            md = getattr(m, "metadata", {}) or {}
+            text = md.get("text", "")
+            if not text:
+                continue
+            self._chunks.append(
+                {
+                    "text": text,
+                    "parent_content": md.get("parent_content") or text,
+                    "filename": md.get("filename", "unknown"),
+                    "owner_username": md.get("owner_username", md.get("user_id", "default")),
+                    "owner_role": md.get("owner_role", "admin"),
+                    # Legacy chunks lacking visibility default to private so
+                    # only admin (who sees all) can access them.
+                    "visibility": md.get("visibility", "private"),
+                    "key": _chunk_key(
+                        md.get("filename", "unknown"), text
+                    ),
+                }
+            )
+        self._rebuild_bm25()
+        return len(self._chunks)
 
 
 def reciprocal_rank_fusion(

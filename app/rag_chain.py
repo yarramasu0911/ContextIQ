@@ -7,6 +7,8 @@ from .retrieval import ChunkRegistry, HybridRetriever, Reranker
 from .query_transformer import rewrite_with_history, hyde, multi_query
 from .cache import SemanticCache
 from .faithfulness import check_grounding, annotate_with_citations
+from .intent import IntentClassifier, INTENT_PROMPT_HINTS
+from .observability import TraceBuffer, AuditLog
 
 
 class RAGChain:
@@ -28,7 +30,10 @@ class RAGChain:
         self.llm_provider = llm_provider
 
         if llm_provider == "huggingface":
-            model_name = "google/flan-t5-base"
+            # Configurable — defaults to flan-t5-large as the README promised.
+            # Options: google/flan-t5-small/base/large/xl, Qwen/Qwen2.5-3B-Instruct.
+            model_name = os.getenv("LLM_HF_MODEL", "google/flan-t5-large")
+            self.hf_model_name = model_name
             self.tokenizer = AutoTokenizer.from_pretrained(model_name)
             self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -56,6 +61,9 @@ class RAGChain:
             reranker=self.reranker,
         )
         self.cache = SemanticCache(embedding_model) if enable_cache else None
+        self.intent = IntentClassifier(embedding_model)
+        self.trace = TraceBuffer()
+        self.audit = AuditLog()
 
     # ------------------------------------------------------------------ LLM
     def _llm_call(self, prompt: str) -> str:
@@ -95,8 +103,13 @@ class RAGChain:
 
     # ---------------------------------------------------------------- prompt
     def build_prompt(
-        self, question: str, context_chunks: list, chat_history: list = None
+        self,
+        question: str,
+        context_chunks: list,
+        chat_history: list = None,
+        intent: str = "other",
     ) -> str:
+        intent_hint = INTENT_PROMPT_HINTS.get(intent, INTENT_PROMPT_HINTS["other"])
         context_parts = []
         for i, doc in enumerate(context_chunks):
             text = doc["content"] if isinstance(doc, dict) else doc
@@ -123,10 +136,10 @@ class RAGChain:
                     f"Previous conversation:\n{history_text}\n\n"
                     f"Context: {context_text}\n\n"
                     f"Question: {question}\n\n"
-                    "Answer the question using the context and conversation history:"
+                    f"{intent_hint} Answer using the context and conversation history:"
                 )
             return (
-                f"Answer the question based on the context.\n\n"
+                f"Answer the question based on the context. {intent_hint}\n\n"
                 f"Context: {context_text}\n\n"
                 f"Question: {question}\n\nAnswer:"
             )
@@ -138,14 +151,14 @@ class RAGChain:
                 f"Conversation history:\n{history_text}\n\n"
                 f"Sources:\n{context_text}\n\n"
                 f"Question: {question}\n\n"
-                "Answer concisely in 2-3 sentences:"
+                f"{intent_hint}"
             )
         return (
             "You are a helpful document assistant. Answer based only on the "
             "sources.\n\n"
             f"Sources:\n{context_text}\n\n"
             f"Question: {question}\n\n"
-            "Answer concisely in 2-3 sentences:"
+            f"{intent_hint}"
         )
 
     # ----------------------------------------------------- casual / greetings
@@ -199,12 +212,17 @@ class RAGChain:
     ):
         """Mirror uploaded chunks into BM25 + invalidate the semantic cache."""
         texts = [c["content"] if isinstance(c, dict) else str(c) for c in chunks]
+        parents = [
+            c.get("parent_content", c["content"]) if isinstance(c, dict) else str(c)
+            for c in chunks
+        ]
         self.registry.add(
             texts,
             filename=filename,
             owner_username=owner_username,
             owner_role=owner_role,
             visibility=visibility,
+            parent_contents=parents,
         )
         # Any upload can affect what a given viewer sees, so nuke the whole
         # semantic cache rather than trying to invalidate per-user.
@@ -233,24 +251,28 @@ class RAGChain:
         chat_history: list = None,
     ) -> dict:
         user_id = viewer_username  # cache keying
-        # 1. Casual short-circuit — no retrieval, no LLM
-        if self.is_casual_message(question):
+
+        # 1. Intent classification — replaces the old keyword matching.
+        # Falls back to 'other' when no class crosses threshold.
+        intent, intent_score = self.intent.classify(question)
+
+        if intent == "casual" or self.is_casual_message(question):
             return {
                 "answer": self.get_casual_response(question),
                 "sources": [],
                 "cached": False,
                 "path": "casual",
+                "intent": intent,
             }
 
-        # 2. Summary shortcut
-        summary_keywords = ["summarize", "summary", "overview", "what is this about", "main points"]
-        if any(kw in question.lower() for kw in summary_keywords):
+        if intent == "summary":
             result = self.summarize(
                 top_k=5,
                 viewer_username=viewer_username,
                 viewer_role=viewer_role,
             )
             result["path"] = "summary"
+            result["intent"] = intent
             return result
 
         # 3. Semantic cache lookup
@@ -309,7 +331,9 @@ class RAGChain:
             }
 
         docs_for_prompt = [{"content": text} for text, _score, _fn in ranked]
-        prompt = self.build_prompt(question, docs_for_prompt, chat_history=chat_history)
+        prompt = self.build_prompt(
+            question, docs_for_prompt, chat_history=chat_history, intent=intent
+        )
         answer = self._llm_call(prompt)
 
         sources = [
@@ -322,6 +346,8 @@ class RAGChain:
             "sources": sources,
             "cached": False,
             "path": "rag",
+            "intent": intent,
+            "intent_score": round(intent_score, 3),
             "retrieval_query": retrieval_query if retrieval_query != question else None,
         }
 
@@ -336,6 +362,46 @@ class RAGChain:
         # 7. Cache the answer
         if self.cache is not None:
             self.cache.store(question, result, user_id=user_id)
+
+        # 8. Trace + audit
+        trace_id = self.trace.record(
+            {
+                "viewer_username": viewer_username,
+                "viewer_role": viewer_role,
+                "question": question,
+                "retrieval_query": retrieval_query,
+                "extra_queries": extra_queries,
+                "intent": intent,
+                "intent_score": round(intent_score, 3),
+                "candidates": [
+                    {"document": fn, "score": float(s), "text": t[:200]}
+                    for t, s, fn in ranked
+                ],
+                "answer": answer,
+                "grounding_score": (
+                    result.get("grounding", {}).get("grounding_score")
+                    if self.enable_faithfulness
+                    else None
+                ),
+            }
+        )
+        result["trace_id"] = trace_id
+
+        self.audit.record(
+            {
+                "username": viewer_username,
+                "role": viewer_role,
+                "question": question,
+                "intent": intent,
+                "documents": sorted({fn for _t, _s, fn in ranked}),
+                "answer": answer,
+                "grounding_score": (
+                    result.get("grounding", {}).get("grounding_score")
+                    if self.enable_faithfulness
+                    else None
+                ),
+            }
+        )
 
         return result
 
