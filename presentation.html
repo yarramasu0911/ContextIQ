@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ContextIQ — Group 2 Final Presentation</title>
+
+  <!-- reveal.js framework from CDN -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" id="theme" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/monokai.css" />
+
+  <style>
+    :root {
+      --accent: #4fc3f7;
+      --accent-dim: #29b6f6;
+      --good: #81c784;
+      --warn: #ffb74d;
+      --bad:  #e57373;
+    }
+    .reveal section { text-align: left; }
+    .reveal h1, .reveal h2, .reveal h3 { color: var(--accent); text-align: left; }
+    .reveal h1 { font-size: 2.2em; }
+    .reveal h2 { font-size: 1.6em; }
+    .reveal h3 { font-size: 1.25em; }
+    .reveal em { color: var(--accent-dim); font-style: normal; font-weight: 600; }
+
+    .title-slide { text-align: center !important; }
+    .title-slide h1 { text-align: center; font-size: 2.6em; }
+    .title-slide .sub { color: #bbb; font-size: 0.9em; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.2em; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1em; }
+
+    .card {
+      background: rgba(79, 195, 247, 0.08);
+      border-left: 4px solid var(--accent);
+      padding: 0.6em 1em;
+      border-radius: 4px;
+      font-size: 0.85em;
+    }
+    .card.warn { border-left-color: var(--warn); background: rgba(255, 183, 77, 0.08); }
+    .card.good { border-left-color: var(--good); background: rgba(129, 199, 132, 0.08); }
+    .card.bad  { border-left-color: var(--bad);  background: rgba(229, 115, 115, 0.08); }
+
+    .pill {
+      display: inline-block;
+      padding: 2px 10px;
+      margin: 2px;
+      background: rgba(79, 195, 247, 0.15);
+      color: var(--accent);
+      border-radius: 12px;
+      font-size: 0.72em;
+      font-weight: 600;
+    }
+
+    .reveal pre { box-shadow: none; font-size: 0.52em; }
+    .reveal pre code { padding: 0.8em 1em; border-radius: 6px; }
+    .reveal table { font-size: 0.7em; }
+    .reveal table th { color: var(--accent); }
+    .reveal ul li { margin: 0.25em 0; }
+
+    .metric {
+      background: rgba(129, 199, 132, 0.08);
+      border: 1px solid rgba(129, 199, 132, 0.3);
+      padding: 0.5em 0.8em;
+      border-radius: 4px;
+      display: inline-block;
+      margin: 4px 6px;
+      font-size: 0.8em;
+    }
+    .metric strong { color: var(--good); }
+
+    .ascii {
+      font-family: 'Courier New', monospace;
+      font-size: 0.55em;
+      line-height: 1.15;
+      color: #ddd;
+      background: #1a1a1a;
+      padding: 0.8em;
+      border-radius: 4px;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .footer-note {
+      position: absolute;
+      bottom: 10px;
+      right: 20px;
+      font-size: 0.5em;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- =============================================== TITLE -->
+<section class="title-slide">
+  <h1>ContextIQ</h1>
+  <p class="sub">Role-aware Document Q&amp;A with Retrieval-Augmented Generation</p>
+  <br/>
+  <p class="sub">Group 2 · Final Presentation · CS 6120 · 2026</p>
+  <aside class="notes">
+    Welcome. ContextIQ is a role-aware RAG system. Over the next 10 slides I'll cover
+    who it's for, what we built, why it matters, how it works, the progress since the
+    proposal, and the challenges we've hit.
+  </aside>
+</section>
+
+<!-- =============================================== AGENDA -->
+<section>
+  <h2>Agenda</h2>
+  <ul>
+    <li><em>Who</em> — users and stakeholders</li>
+    <li><em>What</em> — the product</li>
+    <li><em>Why</em> — the problem being solved</li>
+    <li><em>How</em> — architecture and pipeline</li>
+    <li><em>Vision</em> — the final deliverable</li>
+    <li><em>Progress</em> — what we've built since the proposal</li>
+    <li><em>Challenges &amp; Plan Forward</em></li>
+    <li><em>Q&amp;A</em></li>
+  </ul>
+  <aside class="notes">Roadmap for this talk.</aside>
+</section>
+
+<!-- =============================================== WHO -->
+<section>
+  <h2>Who — users &amp; stakeholders</h2>
+  <div class="three-col">
+    <div class="card">
+      <h3 style="font-size:1em; margin:0 0 .3em 0;">🛡️ Admin</h3>
+      <ul style="font-size:.8em;">
+        <li>Manage users and roles</li>
+        <li>Upload public / team / private docs</li>
+        <li>Read audit log and traces</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="font-size:1em; margin:0 0 .3em 0;">👥 HR</h3>
+      <ul style="font-size:.8em;">
+        <li>Upload team-visible policy docs</li>
+        <li>Read audit log</li>
+        <li>Ask questions across shared corpus</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="font-size:1em; margin:0 0 .3em 0;">👤 User</h3>
+      <ul style="font-size:.8em;">
+        <li>Upload private docs</li>
+        <li>Query own + public docs</li>
+        <li>Chat-style interface</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin-top:1em; font-size:.8em; color:#bbb;">
+    Three roles, three visibility tiers (<em>public</em> / <em>team</em> / <em>private</em>),
+    enforced end-to-end — from Pinecone metadata filters to BM25 in-memory.
+  </p>
+  <aside class="notes">
+    Three roles with strict visibility enforcement. Visibility is metadata on every
+    chunk; the viewer's role builds a Pinecone filter plus an in-memory BM25 predicate.
+  </aside>
+</section>
+
+<!-- =============================================== WHAT -->
+<section>
+  <h2>What — the product</h2>
+  <p>A web app where you upload documents and ask questions about them in natural language.</p>
+  <div class="two-col" style="margin-top:1em;">
+    <ul style="font-size:.85em;">
+      <li><em>19 supported file types</em><br/>
+        <span class="pill">pdf</span><span class="pill">docx</span><span class="pill">xlsx</span>
+        <span class="pill">pptx</span><span class="pill">csv</span><span class="pill">tsv</span>
+        <span class="pill">json</span><span class="pill">yaml</span><span class="pill">xml</span>
+        <span class="pill">html</span><span class="pill">md</span><span class="pill">txt</span>
+        <span class="pill">log</span><span class="pill">rtf</span><span class="pill">…</span>
+      </li>
+    </ul>
+    <ul style="font-size:.85em;">
+      <li><em>Chat UI</em> with history, streaming, and role-based tabs</li>
+      <li><em>Inline citations</em> — every claim is tagged with its source</li>
+      <li><em>Grounding meter</em> — unsupported sentences flagged as <span style="color:var(--warn)">[unverified]</span></li>
+      <li><em>Admin panel</em> — user management, audit, trace viewer</li>
+    </ul>
+  </div>
+  <aside class="notes">
+    Upload almost any document type, get grounded answers with citations. The "role-
+    aware" piece is what makes this different from a generic RAG demo.
+  </aside>
+</section>
+
+<!-- =============================================== WHY -->
+<section>
+  <h2>Why — the problem</h2>
+  <p>RAG systems in 2026 still hit the same six failure modes. Our project addresses all of them.</p>
+  <table style="width:100%; margin-top:1em;">
+    <thead><tr><th>Problem</th><th>What we do about it</th></tr></thead>
+    <tbody>
+      <tr><td>Pure dense search misses exact keywords</td><td>Hybrid BM25 + dense via Reciprocal Rank Fusion</td></tr>
+      <tr><td>Similar-looking top-k, LLM picks wrong chunk</td><td>Cross-encoder reranker (ms-marco-MiniLM)</td></tr>
+      <tr><td>Vague / follow-up questions don't retrieve</td><td>Query rewriting, HyDE, multi-query (opt-in)</td></tr>
+      <tr><td>Hallucinations go undetected</td><td>Per-sentence grounding check → inline <em>[unverified]</em></td></tr>
+      <tr><td>Repeated questions waste tokens &amp; time</td><td>Semantic Q&amp;A cache (0.95 cosine threshold)</td></tr>
+      <tr><td>No regression visibility when we change configs</td><td>RAGAS-style evaluation harness + audit log</td></tr>
+    </tbody>
+  </table>
+  <aside class="notes">
+    This slide motivates every architectural choice. Each row maps to a component that
+    exists in the codebase today.
+  </aside>
+</section>
+
+<!-- =============================================== HOW (architecture) -->
+<section>
+  <h2>How — architecture</h2>
+  <pre class="ascii">User ──► Streamlit UI ──(JWT)──► FastAPI ─┬─► Auth / Roles / Access
+                                          │
+                                          ├─► RAGChain
+                                          │    ├─ IntentClassifier (zero-shot)
+                                          │    ├─ SemanticCache   (⚡ skip)
+                                          │    ├─ QueryTransformer (rewrite / HyDE)
+                                          │    ├─ HybridRetriever
+                                          │    │   ├─ BM25 (in-memory)
+                                          │    │   └─ Pinecone dense (768-d)
+                                          │    ├─ RRF fusion
+                                          │    ├─ Cross-encoder rerank
+                                          │    ├─ LLM: flan-t5-base/large or gpt-4o-mini
+                                          │    ├─ Faithfulness check (per-sentence)
+                                          │    └─ TraceBuffer + AuditLog
+                                          │
+                                          └─► 19 document extractors
+                                               (pdfplumber, openpyxl, python-pptx, OCR, …)</pre>
+  <aside class="notes">
+    End-to-end pipeline. Important details: role filter applies at both retrieval
+    stores; parent-document pattern means we embed small chunks but generate from
+    larger parents.
+  </aside>
+</section>
+
+<!-- =============================================== HOW (chunking pipeline) -->
+<section>
+  <h2>How — the chunking hierarchy</h2>
+  <pre class="ascii">LEVEL 0 · DOCUMENT        whole uploaded file
+            ▼   extract (pdfplumber + OCR fallback, openpyxl, python-pptx, …)
+LEVEL 1 · SENTENCE        sentence-level split
+            ▼   group by semantic similarity (θ = 0.45) + per-type size caps
+LEVEL 2 · CHUNK           ← embedded + indexed + reranked
+            ▼   glue neighbor chunks (parent_window)
+LEVEL 3 · PARENT          ← what the LLM actually sees</pre>
+
+  <div class="two-col" style="margin-top:.8em;">
+    <div class="card">
+      <h3 style="font-size:.9em; margin:0 0 .2em 0;">Retrieve small</h3>
+      <p style="font-size:.75em; margin:0;">
+        Level-2 chunks (~300 tokens) are what get embedded and reranked. Small
+        chunks = sharp similarity signal = better precision.
+      </p>
+    </div>
+    <div class="card">
+      <h3 style="font-size:.9em; margin:0 0 .2em 0;">Generate large</h3>
+      <p style="font-size:.75em; margin:0;">
+        Level-3 parents (chunk + neighbors) are handed to the LLM. More context
+        per source = more complete, grounded answers.
+      </p>
+    </div>
+  </div>
+  <aside class="notes">
+    The small-for-retrieval / large-for-generation split is the key architectural
+    lever that makes everything else work. Chunk sizes are per-extension.
+  </aside>
+</section>
+
+<!-- =============================================== VISION -->
+<section>
+  <h2>Vision of the final product <span class="pill">3 pts</span></h2>
+  <p><em>ContextIQ is a role-aware, production-shaped RAG system that enterprise teams can use to query their own documents with verifiable, cited, hallucination-flagged answers.</em></p>
+
+  <h3 style="margin-top:.7em;">The deliverable by demo day</h3>
+  <ul style="font-size:.85em;">
+    <li>Web app at <code>localhost:8501</code> with role-based login (admin / HR / user)</li>
+    <li>Upload any of 19 document types, with visibility controls</li>
+    <li>Chat interface with inline citations, grounding score, streaming answers</li>
+    <li>Admin panel: user management, audit log, query traces</li>
+    <li>Evaluation harness with RAGAS-style metrics + A/B report</li>
+    <li>Reproducible: <code>docker-compose up</code> + one env file</li>
+  </ul>
+
+  <h3 style="margin-top:.7em;">Success looks like</h3>
+  <div>
+    <span class="metric"><strong>≥ 0.75</strong> mean faithfulness on the gold set</span>
+    <span class="metric"><strong>≥ 0.80</strong> context recall</span>
+    <span class="metric"><strong>&lt; 3 s</strong> median answer latency</span>
+    <span class="metric"><strong>0</strong> cross-role visibility leaks</span>
+  </div>
+  <aside class="notes">
+    This is the north star. Every improvement we've made ties to moving one of
+    these four numbers or enabling a promised feature.
+  </aside>
+</section>
+
+<!-- =============================================== PROGRESS (part 1) -->
+<section>
+  <h2>Progress demonstrated <span class="pill">4 pts</span></h2>
+  <h3>Since the proposal — 16 improvements shipped</h3>
+  <div class="two-col" style="font-size:.7em;">
+    <ol>
+      <li>Rebuild BM25 index on startup from Pinecone</li>
+      <li>JWT session tokens (replaces plaintext password headers)</li>
+      <li>Layout-aware PDF parsing (pdfplumber + tables)</li>
+      <li>OCR fallback for scanned PDFs (pytesseract)</li>
+      <li>Pre-warm cross-encoder reranker at startup</li>
+      <li>Configurable LLM model via env var</li>
+      <li>Configurable multilingual embedder via env var</li>
+      <li>Zero-shot intent classifier (factoid/summary/list/…)</li>
+    </ol>
+    <ol start="9">
+      <li>Streaming <code>/ask/stream</code> SSE endpoint</li>
+      <li>Parent-document retrieval (small embed, big generate)</li>
+      <li>Per-document-type chunk sizing</li>
+      <li>Chat-style UI with persistent history</li>
+      <li>Admin panel — list users, change role, deactivate</li>
+      <li>JSONL audit log (HR/compliance)</li>
+      <li>Admin-only trace buffer <code>/debug/trace</code></li>
+      <li>6 new file extractors (xlsx, pptx, xml, yaml, tsv, log)</li>
+    </ol>
+  </div>
+  <aside class="notes">
+    Fourteen of these are new code modules or major refactors; two are
+    infrastructural hardening. Every item has a test or smoke-test path.
+  </aside>
+</section>
+
+<!-- =============================================== PROGRESS (part 2) -->
+<section>
+  <h2>Progress — by the numbers</h2>
+  <div class="three-col">
+    <div class="metric" style="text-align:center;">
+      <div style="font-size:1.8em;"><strong>1,833</strong></div>
+      <div>chunks in Pinecone index</div>
+    </div>
+    <div class="metric" style="text-align:center;">
+      <div style="font-size:1.8em;"><strong>19</strong></div>
+      <div>supported file types</div>
+    </div>
+    <div class="metric" style="text-align:center;">
+      <div style="font-size:1.8em;"><strong>3</strong></div>
+      <div>roles × visibility tiers</div>
+    </div>
+  </div>
+
+  <div class="three-col" style="margin-top:.5em;">
+    <div class="metric" style="text-align:center;">
+      <div style="font-size:1.8em;"><strong>9</strong></div>
+      <div>new Python modules</div>
+    </div>
+    <div class="metric" style="text-align:center;">
+      <div style="font-size:1.8em;"><strong>14</strong></div>
+      <div>REST endpoints</div>
+    </div>
+    <div class="metric" style="text-align:center;">
+      <div style="font-size:1.8em;"><strong>4</strong></div>
+      <div>eval metrics (RAGAS-style)</div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:.7em;">Live demo checkpoints</h3>
+  <ul style="font-size:.8em;">
+    <li>Login as three different roles — show <em>visibility enforcement</em></li>
+    <li>Upload a PDF with a table — pdfplumber extracts it, inline citations work</li>
+    <li>Ask the same question twice — second call shows <em>⚡ cached</em> path</li>
+    <li>Ask a nonsense question — see <em>[unverified]</em> sentences flagged</li>
+  </ul>
+  <aside class="notes">
+    Open the Streamlit UI during this slide. Log in as admin, show the admin tab
+    with audit log and trace viewer.
+  </aside>
+</section>
+
+<!-- =============================================== CHALLENGES -->
+<section>
+  <h2>Challenges &amp; plan forward <span class="pill">3 pts</span></h2>
+
+  <div class="card bad" style="margin-bottom:.4em;">
+    <strong>Challenge 1: flan-t5-base's short answers drag faithfulness score to 0.</strong><br/>
+    <span style="font-size:.8em;">Its outputs are so terse that sentence embeddings don't cosine-match the long source chunks.</span>
+    <div style="margin-top:.3em; font-size:.8em; color:var(--good);">
+      ▸ Plan: default to <code>flan-t5-large</code> before demo day; add OpenAI path with
+      <code>gpt-4o-mini</code> as the "quality" config. Both already wired.
+    </div>
+  </div>
+
+  <div class="card warn" style="margin-bottom:.4em;">
+    <strong>Challenge 2: chunk size tuning is a blind guess without re-ingestion.</strong><br/>
+    <span style="font-size:.8em;">Changing <code>_CHUNK_SIZE_BY_EXT</code> requires clear + re-upload — friction to A/B test.</span>
+    <div style="margin-top:.3em; font-size:.8em; color:var(--good);">
+      ▸ Plan: build a one-shot <code>/admin/reingest</code> endpoint that walks
+      <code>data/uploads/</code> and re-chunks everything under the current config.
+    </div>
+  </div>
+
+  <div class="card warn" style="margin-bottom:.4em;">
+    <strong>Challenge 3: BM25 is in-memory; restarts are slow with 1,800+ chunks.</strong><br/>
+    <span style="font-size:.8em;">Startup BM25 rebuild from Pinecone takes ~30 s.</span>
+    <div style="margin-top:.3em; font-size:.8em; color:var(--good);">
+      ▸ Plan: persist the tokenized corpus + IDF stats to <code>data/bm25.pkl</code>;
+      startup loads the pickle and diffs against Pinecone instead of full rebuild.
+    </div>
+  </div>
+
+  <div class="card warn">
+    <strong>Challenge 4: evaluation harness has no LLM-as-judge.</strong><br/>
+    <span style="font-size:.8em;">Embedding-based faithfulness misses subtle hallucinations.</span>
+    <div style="margin-top:.3em; font-size:.8em; color:var(--good);">
+      ▸ Plan: add <code>gpt-4o-mini</code> judge for faithfulness + relevance metrics;
+      cheap enough to run on every eval. Keep embedding-based as the free baseline.
+    </div>
+  </div>
+  <aside class="notes">
+    Four concrete obstacles, each with a specific fix and a rough effort estimate.
+    Nothing here blocks demo day — all are improvements on a working system.
+  </aside>
+</section>
+
+<!-- =============================================== Q&A PROMPTS -->
+<section>
+  <h2>Anticipated Q&amp;A</h2>
+  <p><em>Questions reviewers can answer directly from this deck:</em></p>
+  <div class="two-col" style="font-size:.75em;">
+    <div>
+      <p><strong>Who</strong> is this for?<br/>
+      <span style="color:#bbb;">Enterprise teams with three-tier access needs — admins, HR, general users — who want to query internal documents with grounded answers.</span></p>
+
+      <p><strong>What</strong> makes this different from a generic RAG demo?<br/>
+      <span style="color:#bbb;">Role-based visibility enforced at the vector store, hybrid BM25 + dense retrieval, cross-encoder reranking, parent-document retrieval, and runtime faithfulness checks with inline citations.</span></p>
+    </div>
+    <div>
+      <p><strong>Why</strong> hybrid retrieval?<br/>
+      <span style="color:#bbb;">Pure dense search misses exact-match keywords (names, IDs, acronyms). BM25 catches those. RRF fusion is rank-based so the two score scales don't conflict.</span></p>
+
+      <p><strong>How</strong> do you measure progress?<br/>
+      <span style="color:#bbb;">RAGAS-style harness: context recall/precision, answer similarity, faithfulness. Plus latency and cache-hit rate. Run on a gold JSON set any time we change configs.</span></p>
+    </div>
+  </div>
+  <aside class="notes">
+    Pre-empt the reviewer's first four questions. If asked something not on this
+    slide, the challenges slide usually has the seed of an answer.
+  </aside>
+</section>
+
+<!-- =============================================== CLOSING -->
+<section class="title-slide">
+  <h1>Thank you</h1>
+  <p class="sub">Live demo: <code>http://localhost:8501</code></p>
+  <p class="sub">Code: <code>CS6120/ContextIQ</code></p>
+  <br/>
+  <p style="font-size:.7em; color:#888;">
+    Press <kbd>S</kbd> for speaker notes · <kbd>F</kbd> for full-screen ·
+    <kbd>→</kbd>/<kbd>←</kbd> to navigate
+  </p>
+  <aside class="notes">Thanks — happy to take questions.</aside>
+</section>
+
+</div>
+</div>
+
+<!-- reveal.js scripts -->
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/notes/notes.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/plugin/highlight/highlight.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    slideNumber: 'c/t',
+    transition: 'slide',
+    controls: true,
+    progress: true,
+    // 'S' opens speaker-notes view in a new window (reveal.js default binding).
+    // Listed here for visibility; no override needed.
+    keyboard: {
+      83: function () { Reveal.toggleNotes(); }
+    },
+    plugins: [ RevealNotes, RevealHighlight ],
+  });
+</script>
+</body>
+</html>
